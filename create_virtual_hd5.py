@@ -13,7 +13,7 @@ parser.add_option('-i', '--inputs', dest='inputs',
 parser.add_option('-o', '--output', dest='output',
                   help='output file', default='virtual.h5', type='string')
 parser.add_option('-d', '--datasets', dest='datasets',
-                  help='Names of datasets (comma separated)', default='X,X_x,Y,Z', type='string')
+                  help='Names of datasets (comma separated)', default='X,X_c,Y,Z', type='string')
 (opt, args) = parser.parse_args()
 
 inputs = opt.inputs.split(',')

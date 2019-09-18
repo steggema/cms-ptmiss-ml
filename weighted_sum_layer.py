@@ -15,8 +15,10 @@ class weighted_sum_layer(Layer):
         self.ndim = ndim
 
     def get_config(self):
-        base_config = super(weighted_sum_layer, self).get_config()
-        return dict(list(base_config.items()))
+        cfg = super(weighted_sum_layer, self).get_config()
+        cfg['ndim'] = self.ndim
+        cfg['with_bias'] = self.with_bias
+        return cfg
 
     def compute_output_shape(self, input_shape):
         assert input_shape[2] > 1 + self.with_bias * self.ndim
@@ -26,7 +28,7 @@ class weighted_sum_layer(Layer):
 
     def call(self, inputs):
         # input #B x E x F
-        weights = inputs[:, :, 0:1] + 1.  # B x E x 1
+        weights = inputs[:, :, 0:1] - 1.  # B x E x 1
         if not self.with_bias:
             tosum = inputs[:, :, 1:]  # B x E x F-1
             weighted = weights * tosum  # broadcast to B x E x F-1

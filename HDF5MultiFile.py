@@ -1,5 +1,5 @@
+from time import sleep, time
 import h5py
-from time import sleep
 from keras.utils import Sequence
 
 class DataGenerator(Sequence):
@@ -23,7 +23,7 @@ class DataGenerator(Sequence):
         return self.indices[idx] if self.indices is not None else idx
 
 
-class FileInput(object):
+class FileInput():
     '''To be able to load data in parallel, need to have multiple
     hdf5 files. This helper opens one for every call to getitem.
     '''
@@ -33,6 +33,10 @@ class FileInput(object):
         with h5py.File(self.filename, 'r', swmr=True) as h5f:
             self.shape = h5f[self.datasetname].shape
             self.ndim = h5f[self.datasetname].ndim
+            self.len = len(h5f[self.datasetname])
+
+    def __len__(self):
+        return self.len
 
     def __getitem__(self, idx):
         try:
@@ -42,5 +46,34 @@ class FileInput(object):
             print('Sleep and see...')
             sleep(5)
             self.__getitem__(idx)
-            
 
+class FileInputSliceLast():
+    '''To be able to load data in parallel, need to have multiple
+    hdf5 files. This helper opens one for every call to getitem.
+    Slices on last column.
+    '''
+    def __init__(self, filename, datasetname, i_slice=0):
+        self.filename = filename
+        self.datasetname = datasetname
+        self.slice = i_slice
+        with h5py.File(self.filename, 'r', swmr=True) as h5f:
+            self.shape = tuple([b for b in h5f[self.datasetname].shape][:-1])
+            self.ndim = h5f[self.datasetname].ndim - 1
+            self.len = len(h5f[self.datasetname])
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        try:
+            print('FileInputSliceLast get items with indices', idx, self.datasetname)
+            t_start = time()
+            with h5py.File(self.filename, 'r', swmr=True) as h5f:
+                ret = h5f[self.datasetname].__getitem__(idx)[..., self.slice][..., None]
+                t_end = time()
+                print('FileInputSliceLast: Got items with indices', idx, self.datasetname, t_end - t_start)
+                return ret
+        except OSError:
+            print('Sleep and see...')
+            sleep(5)
+            self.__getitem__(idx)
