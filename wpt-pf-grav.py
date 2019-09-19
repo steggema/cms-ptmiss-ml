@@ -173,13 +173,15 @@ with h5py.File(opt.input, 'r', swmr=True) as h5f:
             print([x.shape for x in X_c])
 
             emb_input_dim = {
-                i:np.max(X_c[i][0:1000]) for i in range(n_features_pf_cat)
+                i:np.max(X_c[i][0:1000]) + 1 for i in range(n_features_pf_cat)
             }
 
             # for i in range(n_features_cat):
             #     print('Embedding', i, 'max value', np.max(X_c[:,:,i]))
             # n_max_embed = np.max(np.max(X_c[:,i] for i in range(n_features_cat)))
 
+
+print('Embedding dimensions', emb_input_dim)
 
 met_flavours = ['', 'Chs', 'NoPU', 'Puppi', 'PU', 'PUCorr', 'Raw']
 
@@ -289,6 +291,11 @@ if not opt.notrain:
     from tensorflow import saved_model
     import keras.backend as K
     saved_model.simple_save(K.get_session(), f'{path}/saved_model', inputs={t.name:t for t in model.input}, outputs={t.name:t for t in model.outputs})
+
+    from tensorflow.python.framework import graph_util
+    frozen_graph = graph_util.convert_variables_to_constants(K.get_session(), K.get_session().graph_def, ['output/BiasAdd'])
+    # tf.train.write_graph(graph_or_graph_def=K.get_session().graph_def, logdir=f'{path}', name='saved_model.pb', as_text=False)
+    tf.train.write_graph(graph_or_graph_def=frozen_graph, logdir=f'{path}', name='saved_model.pb', as_text=False)
 
 # Print info about weights
 names = [weight.name for layer in model.layers for weight in layer.weights]
