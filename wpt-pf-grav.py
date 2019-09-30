@@ -4,6 +4,7 @@
 # Created by Jan Steggemann, based on prior work by Markus Seidel
 
 import os
+import pathlib
 import datetime
 import h5py
 import optparse
@@ -21,12 +22,12 @@ from keras.callbacks import EarlyStopping
 from keras.utils import plot_model
 from keras.models import Model
 from keras.layers import Input, Flatten, Reshape, Dense, BatchNormalization, Concatenate, Embedding
-from keras import optimizers
+from keras import optimizers, initializers
 from keras.layers import Lambda
 from keras.backend import slice
 from keras.layers.advanced_activations import PReLU
 
-from caloGraphNN.caloGraphNN_keras import *
+from tensorflow import train
 
 # Local imports
 from cyclical_learning_rate import CyclicLR
@@ -70,7 +71,7 @@ def create_output_graph(n_features=8, n_features_cat=3, n_graph_layers=0, n_dens
                 inputs = [inputs, input_cat]
             else:
                 inputs.append(input_cat)
-            embedding = Embedding(input_dim=emb_input_dim[i_emb], output_dim=emb_out_dim, embeddings_initializer=keras.initializers.RandomNormal(mean=0., stddev=0.4/emb_out_dim), name='embedding{}'.format(i_emb))(input_cat)
+            embedding = Embedding(input_dim=emb_input_dim[i_emb], output_dim=emb_out_dim, embeddings_initializer=initializers.RandomNormal(mean=0., stddev=0.4/emb_out_dim), name='embedding{}'.format(i_emb))(input_cat)
             embedding = Reshape((maxNPF, 8))(embedding)
             embeddings.append(embedding)
 
@@ -99,7 +100,7 @@ def create_output_graph(n_features=8, n_features_cat=3, n_graph_layers=0, n_dens
         # x = Dense(3 if with_bias else 1, activation='linear', kernel_initializer='lecun_uniform')(x)
 
         # Expect typical weights to not be of order 1 but somewhat smaller, so apply explicit scaling
-        x = Dense(3 if with_bias else 1, activation='linear', kernel_initializer=keras.initializers.VarianceScaling(scale=0.02))(x)
+        x = Dense(3 if with_bias else 1, activation='linear', kernel_initializer=initializers.VarianceScaling(scale=0.02))(x)
         print('Shape of last dense layer', x.shape)
         x = Concatenate()([x, pxpy])
         #x = Flatten()(x)
@@ -206,7 +207,7 @@ model = Model(inputs=inputs, outputs=outputs)
 optimizer = optimizers.Adam(lr=1.)
 # optimizer = optimizers.SGD(lr=0.0001, decay=0., momentum=0., nesterov=False)
 # optimizer = AdamW(lr=0.0000, beta_1=0.8, beta_2=0.999, epsilon=None, decay=0., weight_decay=0.000, batch_size=batch_size, samples_per_epoch=int(len(Z)*0.8), epochs=epochs)
-model.compile(loss='mse', optimizer=optimizer, 
+model.compile(loss='mse', optimizer=optimizer,
               metrics=['mean_absolute_error', 'mean_squared_error'])
 # print the model summary
 model.summary()
@@ -216,8 +217,7 @@ if opt.load:
 else:
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
 path = f'models/{timestamp}'
-if not os.path.isdir(path):
-    os.mkdir(path)
+pathlib.Path(path).mkdir(parents=True, exist_ok=True)
 
 plot_model(model, to_file=f'{path}/model.png', show_shapes=True)
 
@@ -294,8 +294,8 @@ if not opt.notrain:
 
     from tensorflow.python.framework import graph_util
     frozen_graph = graph_util.convert_variables_to_constants(K.get_session(), K.get_session().graph_def, ['output/BiasAdd'])
-    # tf.train.write_graph(graph_or_graph_def=K.get_session().graph_def, logdir=f'{path}', name='saved_model.pb', as_text=False)
-    tf.train.write_graph(graph_or_graph_def=frozen_graph, logdir=f'{path}', name='saved_model.pb', as_text=False)
+    # train.write_graph(graph_or_graph_def=K.get_session().graph_def, logdir=f'{path}', name='saved_model.pb', as_text=False)
+    train.write_graph(graph_or_graph_def=frozen_graph, logdir=f'{path}', name='saved_model.pb', as_text=False)
 
 # Print info about weights
 names = [weight.name for layer in model.layers for weight in layer.weights]
