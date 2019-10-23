@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
-
+import keras
 from keras.callbacks import ReduceLROnPlateau
 from keras.callbacks import ModelCheckpoint
 from keras.callbacks import EarlyStopping
@@ -26,7 +26,10 @@ from keras.layers import Lambda
 from keras.backend import slice
 from keras.layers.advanced_activations import PReLU
 
-from caloGraphNN.caloGraphNN_keras import *
+import tensorflow as tf
+import keras.backend as K
+
+# from caloGraphNN.caloGraphNN_keras import *
 
 # Local imports
 from cyclical_learning_rate import CyclicLR
@@ -53,6 +56,30 @@ def plot_history(history):
     plt.yscale('log')
     plt.legend()
 
+
+def custom_loss(y_true, y_pred):
+    px_truth = K.flatten(y_true[:,0])
+    py_truth = K.flatten(y_true[:,1])
+    px_pred = K.flatten(y_pred[:,0])
+    py_pred = K.flatten(y_pred[:,1])
+    
+    pt_truth = K.sqrt(px_truth*px_truth + py_truth*py_truth)
+
+    px_truth1 = px_truth / pt_truth
+    py_truth1 = py_truth / pt_truth
+
+    upar_pred = px_truth1 * px_pred + py_truth1 * py_pred - pt_truth
+    upar_pred_plus = tf.boolean_mask(tf.boolean_mask(upar_pred, upar_pred > 0.), upar_pred < 50.)
+    upar_pred_minus = tf.boolean_mask(tf.boolean_mask(upar_pred, upar_pred < 0.), upar_pred < 50.)
+
+    # uperp_pred = px_truth1 * py_pred - py_truth1 * px_pred
+
+    # loss = K.mean(upar_pred**2 + uperp_pred**2)
+    loss = K.mean((px_pred - px_truth)**2 + (py_pred - py_truth)**2)
+    # dev = (K.mean(upar_pred_plus) + K.mean(upar_pred_minus))**2
+    dev = ((tf.reduce_sum(upar_pred_plus) + tf.reduce_sum(upar_pred_minus))/tf.reduce_sum(upar_pred_plus - upar_pred_minus))**2
+    loss += dev
+    return loss
 
 def create_output_graph(n_features=8, n_features_cat=3, n_graph_layers=0, n_dense_layers=3, n_dense_per_graph_net=1, activation='tanh', do_weighted_sum=True, with_bias=True):
     # [b'PF_dxy', b'PF_dz', b'PF_eta', b'PF_mass', b'PF_puppiWeight', b'PF_charge', b'PF_fromPV', b'PF_pdgId',  b'PF_px', b'PF_py']
@@ -183,7 +210,8 @@ with h5py.File(opt.input, 'r', swmr=True) as h5f:
 
 print('Embedding dimensions', emb_input_dim)
 
-met_flavours = ['', 'Chs', 'NoPU', 'Puppi', 'PU', 'PUCorr', 'Raw']
+# met_flavours = ['', 'Chs', 'NoPU', 'Puppi', 'PU', 'PUCorr', 'Raw']
+met_flavours = ['',  'Puppi', 'Raw']
 
 Y = FileInput(opt.input, 'Y')
 print('Y.shape', Y.shape)
@@ -195,18 +223,20 @@ if opt.simple:
 else:
     inputs, outputs = create_output_graph(n_features=n_features_pf, n_features_cat=n_features_pf_cat)
 
-
+lr_scale = 1.
 
 # lr = CyclicLR(base_lr=0.001, max_lr=0.01, step_size=len(Y)/5., mode='triangular2')
-clr = CyclicLR(base_lr=0.0003, max_lr=0.001, step_size=len(Y)/batch_size, mode='triangular2')
+clr = CyclicLR(base_lr=0.0003*lr_scale, max_lr=0.001*lr_scale, step_size=len(Y)/batch_size, mode='triangular2')
 
 # create the model
 model = Model(inputs=inputs, outputs=outputs)
 # compile the model
-optimizer = optimizers.Adam(lr=1.)
+optimizer = optimizers.Adam(lr=1., clipnorm=1.)
 # optimizer = optimizers.SGD(lr=0.0001, decay=0., momentum=0., nesterov=False)
 # optimizer = AdamW(lr=0.0000, beta_1=0.8, beta_2=0.999, epsilon=None, decay=0., weight_decay=0.000, batch_size=batch_size, samples_per_epoch=int(len(Z)*0.8), epochs=epochs)
 model.compile(loss='mse', optimizer=optimizer, 
+              metrics=['mean_absolute_error', 'mean_squared_error'])
+model.compile(loss=custom_loss, optimizer=optimizer, 
               metrics=['mean_absolute_error', 'mean_squared_error'])
 # print the model summary
 model.summary()
@@ -289,7 +319,6 @@ if not opt.notrain:
     model.save(f'{path}/model.h5')
 
     from tensorflow import saved_model
-    import keras.backend as K
     saved_model.simple_save(K.get_session(), f'{path}/saved_model', inputs={t.name:t for t in model.input}, outputs={t.name:t for t in model.outputs})
 
     from tensorflow.python.framework import graph_util
