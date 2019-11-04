@@ -58,28 +58,62 @@ def plot_history(history):
     plt.legend()
 
 
-def custom_loss(y_true, y_pred):
+def custom_loss(y_true, y_pred, abs_resp=False):
     px_truth = K.flatten(y_true[:,0])
     py_truth = K.flatten(y_true[:,1])
     px_pred = K.flatten(y_pred[:,0])
     py_pred = K.flatten(y_pred[:,1])
-    
+
     pt_truth = K.sqrt(px_truth*px_truth + py_truth*py_truth)
 
     px_truth1 = px_truth / pt_truth
     py_truth1 = py_truth / pt_truth
 
-    upar_pred = px_truth1 * px_pred + py_truth1 * py_pred - pt_truth
-    upar_pred_plus = tf.boolean_mask(tf.boolean_mask(upar_pred, upar_pred > 0.), upar_pred < 50.)
-    upar_pred_minus = tf.boolean_mask(tf.boolean_mask(upar_pred, upar_pred < 0.), upar_pred < 50.)
+    if abs_resp:
+        upar_pred = px_truth1 * px_pred + py_truth1 * py_pred - pt_truth
+        # Note 50 = 50*norm_fac = 2500 GeV (if norm_fac = 50)
+        upar_pred_l100 = tf.boolean_mask(upar_pred, upar_pred < 100.)
+        upar_pred_plus = tf.boolean_mask(upar_pred_l100, upar_pred_l100 > 0.)
+        upar_pred_minus = tf.boolean_mask(upar_pred_l100, upar_pred_l100 < 0.)
+
+        dev = ((tf.reduce_sum(upar_pred_plus) + tf.reduce_sum(upar_pred_minus))/tf.reduce_sum(upar_pred_plus - upar_pred_minus))**2
+    else: # Relative response
+        # Secretly using absolute response
+        # upar_pred = (px_truth1 * px_pred + py_truth1 * py_pred)/pt_truth
+        upar_pred = (px_truth1 * px_pred + py_truth1 * py_pred) - pt_truth
+        # upar_pred = tf.boolean_mask(upar_pred, pt_truth > 20./50.) - 1.
+        pt_cut = pt_truth > 0./50.
+        upar_pred = tf.boolean_mask(upar_pred, pt_cut)
+        pt_truth_filtered = tf.boolean_mask(pt_truth, pt_cut)
+
+        filter_bin0 = pt_truth_filtered < 5./50.
+        filter_bin1 = tf.logical_and(pt_truth_filtered > 5./50., pt_truth_filtered < 10./50.)
+        filter_bin2 = pt_truth_filtered > 10./50.
+
+        upar_pred_pos_bin0 = tf.boolean_mask(upar_pred, tf.logical_and(filter_bin0, upar_pred > 0.))
+        upar_pred_neg_bin0 = tf.boolean_mask(upar_pred, tf.logical_and(filter_bin0, upar_pred < 0.))
+        upar_pred_pos_bin1 = tf.boolean_mask(upar_pred, tf.logical_and(filter_bin1, upar_pred > 0.))
+        upar_pred_neg_bin1 = tf.boolean_mask(upar_pred, tf.logical_and(filter_bin1, upar_pred < 0.))
+        upar_pred_pos_bin2 = tf.boolean_mask(upar_pred, tf.logical_and(filter_bin2, upar_pred > 0.))
+        upar_pred_neg_bin2 = tf.boolean_mask(upar_pred, tf.logical_and(filter_bin2, upar_pred < 0.))
+        norm = tf.reduce_sum(pt_truth_filtered)
+        dev = tf.abs(tf.reduce_sum(upar_pred_pos_bin0) + tf.reduce_sum(upar_pred_neg_bin0))
+        dev += tf.abs(tf.reduce_sum(upar_pred_pos_bin1) + tf.reduce_sum(upar_pred_neg_bin1))
+        dev += tf.abs(tf.reduce_sum(upar_pred_pos_bin2) + tf.reduce_sum(upar_pred_neg_bin2))
+        dev /= norm
+
+        # upar_pred_gr1 = tf.boolean_mask(upar_pred, upar_pred > 0.)
+        # upar_pred_le1 = tf.boolean_mask(upar_pred, upar_pred < 0.)
+
+        # dev = tf.abs((tf.reduce_sum(upar_pred_gr1) + tf.reduce_sum(upar_pred_le1))/(tf.reduce_sum(pt_truth_filtered)))
 
     # uperp_pred = px_truth1 * py_pred - py_truth1 * px_pred
 
     # loss = K.mean(upar_pred**2 + uperp_pred**2)
-    loss = K.mean((px_pred - px_truth)**2 + (py_pred - py_truth)**2)
+    loss = 0.5*K.mean((px_pred - px_truth)**2 + (py_pred - py_truth)**2)
     # dev = (K.mean(upar_pred_plus) + K.mean(upar_pred_minus))**2
-    dev = ((tf.reduce_sum(upar_pred_plus) + tf.reduce_sum(upar_pred_minus))/tf.reduce_sum(upar_pred_plus - upar_pred_minus))**2
-    loss += dev
+
+    loss += 200.*dev
     return loss
 
 def create_output_graph(n_features=8, n_features_cat=3, n_graph_layers=0, n_dense_layers=3, n_dense_per_graph_net=1, activation='tanh', do_weighted_sum=True, with_bias=True):
@@ -235,10 +269,11 @@ model = Model(inputs=inputs, outputs=outputs)
 optimizer = optimizers.Adam(lr=1., clipnorm=1.)
 # optimizer = optimizers.SGD(lr=0.0001, decay=0., momentum=0., nesterov=False)
 # optimizer = AdamW(lr=0.0000, beta_1=0.8, beta_2=0.999, epsilon=None, decay=0., weight_decay=0.000, batch_size=batch_size, samples_per_epoch=int(len(Z)*0.8), epochs=epochs)
+
 model.compile(loss='mse', optimizer=optimizer,
               metrics=['mean_absolute_error', 'mean_squared_error'])
-model.compile(loss=custom_loss, optimizer=optimizer, 
-              metrics=['mean_absolute_error', 'mean_squared_error'])
+# model.compile(loss=custom_loss, optimizer=optimizer, 
+              # metrics=['mean_absolute_error', 'mean_squared_error'])
 # print the model summary
 model.summary()
 
@@ -288,6 +323,7 @@ model_checkpoint = ModelCheckpoint(f'{path}/model.h5', monitor='val_loss',
 reduce_lr = ReduceLROnPlateau(
     monitor='val_loss', factor=0.5, patience=4, min_lr=0.000001, cooldown=3, verbose=1)
 
+stop_on_nan = keras.callbacks.TerminateOnNaN()
 
 
 # LR finder
@@ -306,7 +342,7 @@ if not opt.notrain:
     history = model.fit_generator(gen_x_train,
                                   epochs=epochs,
                                   verbose=1,  # switch to 1 for more verbosity
-                                  callbacks=[early_stopping, clr],#, reduce_lr], #, lr,   reduce_lr],
+                                  callbacks=[early_stopping, clr, stop_on_nan],#, reduce_lr], #, lr,   reduce_lr],
                                   # callbacks=[early_stopping, reduce_lr], #, lr, reduce_lr],
                                   use_multiprocessing=True,
                                   workers=8,
@@ -337,8 +373,8 @@ for name, weight in zip(names, weights):
 
 # Print info about physically meaningful quantities
 selectors = {
-    'ptgr100':np.where(np.sqrt(Y[:,1]**2 + Y[:,0]**2) > 100./normFac),
-    'ptgr50':np.where(np.sqrt(Y[:,1]**2 + Y[:,0]**2) > 50./normFac),
+    'ptgr100':np.where(np.sqrt(Y[:, 1]**2 + Y[:, 0]**2) > 100./normFac),
+    'ptgr50':np.where(np.sqrt(Y[:, 1]**2 + Y[:, 0]**2) > 50./normFac),
     'all':np.ones(len(Z), dtype=bool)
 }
 

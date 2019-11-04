@@ -27,6 +27,7 @@ for dataset in datasets:
     shapes = []
     dtypes = []
     for inp in inputs:
+        # print('Adding file', inp)
         with h5py.File(inp, 'r') as f_in:
             shapes.append(f_in[dataset].shape)
             dtypes.append(f_in[dataset].dtype)

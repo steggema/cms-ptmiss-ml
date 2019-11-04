@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+from matplotlib.lines import Line2D
 
 def recoil_plots(truth, pred, pfmet, puppi, path):
     px_truth, py_truth, pt_truth = truth
@@ -113,7 +114,7 @@ def recoil_plots(truth, pred, pfmet, puppi, path):
     plt.figure(figsize=(30, 6))
     plt.subplot(141)
     plt.xlabel('Z pT truth [GeV]')
-    plt.ylabel('$u_{||}^W$ CNN [GeV]')
+    plt.ylabel('$u_{||}$ DNN [GeV]')
     x = np.arange(0, 1*plotrange, 0.1)
     plt.plot(x, x, color='red')
     plt.hist2d(pt_truth, par_pred, norm=LogNorm(),
@@ -122,7 +123,7 @@ def recoil_plots(truth, pred, pfmet, puppi, path):
 
     plt.subplot(142)
     plt.xlabel('Z pT truth [GeV]')
-    plt.ylabel('$u_{||}^W$ CNN - Z pT truth [GeV]')
+    plt.ylabel('$u_{||}$ DNN - Z pT truth [GeV]')
     x = np.arange(0, 3*plotrange, 0.1)
     y = x*0
     plt.plot(x, y, color='red')
@@ -131,8 +132,8 @@ def recoil_plots(truth, pred, pfmet, puppi, path):
     plt.colorbar()
 
     plt.subplot(143)
-    plt.xlabel('Z pT CNN [GeV]')
-    plt.ylabel('$u_{||}^W$ CNN - Z pT truth [GeV]')
+    plt.xlabel('Z pT DNN [GeV]')
+    plt.ylabel('$u_{||}$ DNN - Z pT truth [GeV]')
     x = np.arange(0, 3*plotrange, 0.1)
     y = x*0
     plt.plot(x, y, color='red')
@@ -142,11 +143,11 @@ def recoil_plots(truth, pred, pfmet, puppi, path):
 
     #pt_diff = (pt_pred - pt_truth)
     plt.subplot(144)
-    plt.xlabel('$u_{||}^W$ bias [GeV]')
+    plt.xlabel('$u_{||}$ bias [GeV]')
     plt.hist(-pt_truth, bins=50, range=(-plotrange, plotrange),
              histtype='step', label='bias 0')
     plt.hist(par_pred - pt_truth, bins=50, range=(-plotrange,
-                                                  plotrange), histtype='step', label='bias CNN')
+                                                  plotrange), histtype='step', label='bias DNN')
     plt.hist(par_pred_pfmet - pt_truth, bins=50, range=(-plotrange,
                                                         plotrange), histtype='step', label='bias pfmet')
     plt.hist(par_pred_puppi - pt_truth, bins=50, range=(-plotrange,
@@ -154,7 +155,29 @@ def recoil_plots(truth, pred, pfmet, puppi, path):
     plt.hist(pt_truth, bins=50, range=(-plotrange, plotrange),
              histtype='step', label='truth', linestyle='--', color='blue')
     plt.hist(par_pred, bins=50, range=(-plotrange, plotrange),
-             histtype='step', label='prediction CNN', linestyle='--', color='orange')
+             histtype='step', label='prediction DNN', linestyle='--', color='orange')
     plt.legend(loc='upper right')
 
     plt.savefig('%s/upar.pdf' % path, bbox_inches='tight')
+
+    resp_dnn = []
+    resp_puppi = []
+    resp_pf = []
+    x_vals = []
+    step = 4.
+    n_steps = 25
+    for i in range(n_steps):
+        x_vals.append(step/2. + i*step)
+        resp_dnn.append(np.mean((par_pred/pt_truth)[np.logical_and(pt_truth < (i+1)*step, pt_truth > i*step)]))
+        resp_puppi.append(np.mean((par_pred_puppi/pt_truth)[np.logical_and(pt_truth < (i+1)*step, pt_truth > i*step)]))
+        resp_pf.append(np.mean((par_pred_pfmet/pt_truth)[np.logical_and(pt_truth < (i+1)*step, pt_truth > i*step)]))
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(x_vals, resp_dnn, label='response DNN')
+    plt.plot(x_vals, resp_puppi, 'r:', label='response Puppi')
+    plt.plot(x_vals, resp_pf, 'k--', label='response PF')
+    Line2D([0, step*n_steps], [1, 1], ls=':', color='gray')
+    plt.xlabel('$q_{T}$ [GeV]')
+    plt.ylabel('$u_{||}/q_{T}$')
+    plt.legend(loc='lower right')
+    plt.savefig('%s/resp.pdf' % path, bbox_inches='tight')

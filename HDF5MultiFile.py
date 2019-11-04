@@ -1,3 +1,4 @@
+import numpy as np
 from time import sleep, time
 import h5py
 from keras.utils import Sequence
@@ -41,6 +42,8 @@ class FileInput():
     def __getitem__(self, idx):
         try:
             with h5py.File(self.filename, 'r', swmr=True) as h5f:
+                if len(self.shape)>2 and self.shape[2] == 9:
+                    return np.concatenate((h5f[self.datasetname].__getitem__(idx)[...,:6], h5f[self.datasetname].__getitem__(idx)[...,7:]), axis=2)
                 return h5f[self.datasetname].__getitem__(idx)
         except OSError:
             print('Sleep and see...')
