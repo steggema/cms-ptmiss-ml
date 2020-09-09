@@ -32,7 +32,7 @@ conda activate tf_gpu
 Example training command (mind that using inputs from eos can be very slow):
 
 ```shell
-python -i wpt-pf-grav.py -i /eos/user/s/steggema/ptmiss/dy_pf_chunk56.h5 --embedding
+python -i train_ptmiss.py -i /eos/user/s/steggema/ptmiss/dy_pf_chunk56.h5 --embedding
 ```
 
 In order to run over a large number of samples, mixing different processes, create a "virtual hdf5" index file, and then run it with the command above:
