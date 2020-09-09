@@ -34,6 +34,8 @@ class weighted_sum_layer(Layer):
             weighted = weights * tosum  # broadcast to B x E x F-1
         else:
             tosum = inputs[:, :, self.ndim+1:]  # B x E x F-1
+            tosum[tf.where(tf.greater(tosum, 140.))] = 0.
+            tosum[tf.where(tf.greater(-140., tosum))] = 0.
             biases = inputs[:, :, 1:self.ndim+1]
             weighted = weights * (biases + tosum)  # broadcast to B x E x F-1
         return tf.reduce_sum(weighted, axis=1)

@@ -210,6 +210,7 @@ parser.add_option('--find_lr', dest='find_lr',
 
 # general setup
 maxNPF = 4500
+maxNPF = 12500
 n_features_pf = 8
 n_features_pf_cat = 3
 normFac = 50.
@@ -261,7 +262,7 @@ else:
 lr_scale = 1.
 
 # lr = CyclicLR(base_lr=0.001, max_lr=0.01, step_size=len(Y)/5., mode='triangular2')
-clr = CyclicLR(base_lr=0.0003*lr_scale, max_lr=0.001*lr_scale, step_size=len(Y)/batch_size, mode='triangular2')
+clr = CyclicLR(base_lr=0.0002*lr_scale, max_lr=0.0005*lr_scale, step_size=len(Y)/batch_size, mode='triangular2')
 
 # create the model
 model = Model(inputs=inputs, outputs=outputs)
@@ -270,10 +271,10 @@ optimizer = optimizers.Adam(lr=1., clipnorm=1.)
 # optimizer = optimizers.SGD(lr=0.0001, decay=0., momentum=0., nesterov=False)
 # optimizer = AdamW(lr=0.0000, beta_1=0.8, beta_2=0.999, epsilon=None, decay=0., weight_decay=0.000, batch_size=batch_size, samples_per_epoch=int(len(Z)*0.8), epochs=epochs)
 
-model.compile(loss='mse', optimizer=optimizer,
-              metrics=['mean_absolute_error', 'mean_squared_error'])
-# model.compile(loss=custom_loss, optimizer=optimizer, 
-              # metrics=['mean_absolute_error', 'mean_squared_error'])
+#model.compile(loss='mse', optimizer=optimizer,
+              #metrics=['mean_absolute_error', 'mean_squared_error'])
+model.compile(loss=custom_loss, optimizer=optimizer, 
+               metrics=['mean_absolute_error', 'mean_squared_error'])
 # print the model summary
 model.summary()
 
@@ -298,7 +299,7 @@ with open(f'{path}/summary.txt', 'w') as txtfile:
 Yr = Y
 
 indices = np.array([i for i in range(len(Yr)//batch_size)])
-indices_train, indices_test = train_test_split(indices, test_size=0.2, random_state=7)
+indices_train, indices_test = train_test_split(indices, test_size=0.2, random_state=77)
 
 Z = FileInput(opt.input, 'Z')
 
